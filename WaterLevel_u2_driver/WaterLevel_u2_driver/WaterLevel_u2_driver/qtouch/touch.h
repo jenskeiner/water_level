@@ -218,6 +218,11 @@ extern "C" {
  */
 #define DEF_MAX_ON_DURATION 0
 
+/* Manuelle Kalibrierung + EEPROM */
+void touch_calibrate_all(void);
+void touch_save_current_cc(void);
+void touch_apply_stored_cc(void);
+
 #ifdef __cplusplus
 }
 #endif // __cplusplus

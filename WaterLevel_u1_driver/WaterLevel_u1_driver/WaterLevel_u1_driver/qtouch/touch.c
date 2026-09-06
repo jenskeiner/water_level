@@ -28,6 +28,7 @@ Copyright (c) 2017 Microchip. All rights reserved.
 
 #include "touch.h"
 #include "license.h"
+#include "eeprom_cc.h"   /* oder "../eeprom_cc.h" je nach Ablageort */
 
 #include "port.h"
 
@@ -272,21 +273,24 @@ static touch_ret_t touch_sensors_config(void)
 {
 	uint16_t    sensor_nodes;
 	touch_ret_t touch_ret = TOUCH_SUCCESS;
+	uint16_t    stored_cc[DEF_NUM_CHANNELS];
+	bool        have_stored = ee_load_cc(stored_cc, DEF_NUM_CHANNELS);
 
-	/* Init pointers to DMA sequence memory */
 	qtm_ptc_qtlib_assign_signal_memory(&touch_acq_signals_raw[0]);
 
-	/* Initialize sensor nodes */
-
 	for (sensor_nodes = 0u; sensor_nodes < DEF_NUM_CHANNELS; sensor_nodes++)
-
 	{
-		/* Enable each node for measurement and mark for calibration */
 		qtm_enable_sensor_node(&qtlib_acq_set1, sensor_nodes);
-		qtm_calibrate_sensor_node(&qtlib_acq_set1, sensor_nodes);
+
+		if (have_stored) {
+			/* Gespeicherte CC-Werte – keine Auto-Kalibrierung */
+			ptc_qtlib_node_stat1[sensor_nodes].node_comp_caps = stored_cc[sensor_nodes];
+			} else {
+			/* Kein EEPROM-Inhalt → einmalig kalibrieren (Sensor sollte trocken sein) */
+			qtm_calibrate_sensor_node(&qtlib_acq_set1, sensor_nodes);
+		}
 	}
 
-	/* Enable sensor keys and assign nodes */
 	for (sensor_nodes = 0u; sensor_nodes < DEF_NUM_CHANNELS; sensor_nodes++) {
 		qtm_init_sensor_key(&qtlib_key_set1, sensor_nodes, &ptc_qtlib_node_stat1[sensor_nodes]);
 	}
@@ -562,6 +566,35 @@ Notes    :  none
 ISR(ADC0_RESRDY_vect)
 {
 	qtm_t161x_ptc_handler_eoc();
+}
+
+void touch_calibrate_all(void)
+{
+	uint16_t i;
+	for (i = 0u; i < DEF_NUM_CHANNELS; i++) {
+		qtm_calibrate_sensor_node(&qtlib_acq_set1, i);
+	}
+}
+
+void touch_save_current_cc(void)
+{
+	uint16_t cc[DEF_NUM_CHANNELS];
+	uint16_t i;
+	for (i = 0u; i < DEF_NUM_CHANNELS; i++) {
+		cc[i] = ptc_qtlib_node_stat1[i].node_comp_caps;
+	}
+	ee_save_cc(cc, DEF_NUM_CHANNELS);
+}
+
+void touch_apply_stored_cc(void)
+{
+	uint16_t cc[DEF_NUM_CHANNELS];
+	uint16_t i;
+	if (ee_load_cc(cc, DEF_NUM_CHANNELS)) {
+		for (i = 0u; i < DEF_NUM_CHANNELS; i++) {
+			ptc_qtlib_node_stat1[i].node_comp_caps = cc[i];
+		}
+	}
 }
 
 #endif /* TOUCH_C */
